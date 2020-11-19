@@ -1,6 +1,7 @@
 export * from './account-followers.feed';
 export * from './account-following.feed';
 export * from './account-friendships.feed';
+export * from './account-friendships-besties.feed';
 export * from './blocked-users.feed';
 export * from './direct-inbox.feed';
 export * from './direct-thread.feed';
@@ -23,3 +24,7 @@ export * from './music-genre.feed';
 export * from './usertags.feed';
 export * from './posts-insights.feed';
 export * from './stories-insights.feed';
+export * from './igtv.browse.feed';
+export * from './igtv.channel.feed';
+export * from './liked.feed';
+export * from './topical-explore.feed';

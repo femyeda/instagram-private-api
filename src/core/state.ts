@@ -6,39 +6,74 @@ import { Cookie, CookieJar, MemoryCookieStore } from 'tough-cookie';
 import * as devices from '../samples/devices.json';
 import * as builds from '../samples/builds.json';
 import * as supportedCapabilities from '../samples/supported-capabilities.json';
-import {
-  APP_VERSION,
-  APP_VERSION_CODE,
-  BREADCRUMB_KEY,
-  EXPERIMENTS,
-  FACEBOOK_ANALYTICS_APPLICATION_ID,
-  FACEBOOK_ORCA_APPLICATION_ID,
-  FACEBOOK_OTA_FIELDS,
-  HOST,
-  LOGIN_EXPERIMENTS,
-  SIGNATURE_KEY,
-  SIGNATURE_VERSION,
-} from './constants';
+import * as Constants from './constants';
 import { ChallengeStateResponse, CheckpointResponse } from '../responses';
 import { IgCookieNotFoundError, IgNoCheckpointError, IgUserIdNotFoundError } from '../errors';
+import { Enumerable } from '../decorators';
+import debug from 'debug';
 
 export class State {
-  signatureKey: string = SIGNATURE_KEY;
-  signatureVersion: string = SIGNATURE_VERSION;
-  userBreadcrumbKey: string = BREADCRUMB_KEY;
-  appVersion: string = APP_VERSION;
-  appVersionCode: string = APP_VERSION_CODE;
-  fbAnalyticsApplicationId: string = FACEBOOK_ANALYTICS_APPLICATION_ID;
-  fbOtaFields: string = FACEBOOK_OTA_FIELDS;
-  fbOrcaApplicationId: string = FACEBOOK_ORCA_APPLICATION_ID;
-  loginExperiments: string = LOGIN_EXPERIMENTS;
-  experiments: string = EXPERIMENTS;
+  private static stateDebug = debug('ig:state');
+  get signatureKey(): string {
+    return this.constants.SIGNATURE_KEY;
+  }
+
+  get signatureVersion(): string {
+    return this.constants.SIGNATURE_VERSION;
+  }
+
+  get userBreadcrumbKey(): string {
+    return this.constants.BREADCRUMB_KEY;
+  }
+
+  get appVersion(): string {
+    return this.constants.APP_VERSION;
+  }
+
+  get appVersionCode(): string {
+    return this.constants.APP_VERSION_CODE;
+  }
+
+  get fbAnalyticsApplicationId(): string {
+    return this.constants.FACEBOOK_ANALYTICS_APPLICATION_ID;
+  }
+
+  get fbOtaFields(): string {
+    return this.constants.FACEBOOK_OTA_FIELDS;
+  }
+
+  get fbOrcaApplicationId(): string {
+    return this.constants.FACEBOOK_ORCA_APPLICATION_ID;
+  }
+
+  get loginExperiments(): string {
+    return this.constants.LOGIN_EXPERIMENTS;
+  }
+
+  get experiments(): string {
+    return this.constants.EXPERIMENTS;
+  }
+
+  get bloksVersionId(): string {
+    return this.constants.BLOKS_VERSION_ID;
+  }
+
+  @Enumerable(false)
+  constants = Constants;
   supportedCapabilities = supportedCapabilities;
   language: string = 'en_US';
   timezoneOffset: string = String(new Date().getTimezoneOffset() * -60);
   radioType = 'wifi-none';
-  capabilitiesHeader = '3brTvw==';
+  capabilitiesHeader = '3brTvwE=';
   connectionTypeHeader = 'WIFI';
+  isLayoutRTL: boolean = false;
+  euDCEnabled?: boolean = undefined;
+  adsOptOut: boolean = false;
+  thumbnailCacheBustingValue: number = 1000;
+  igWWWClaim?: string;
+  authorization?: string;
+  passwordEncryptionPubKey?: string;
+  passwordEncryptionKeyId?: string | number;
   deviceString: string;
   build: string;
   uuid: string;
@@ -53,10 +88,15 @@ export class State {
    */
   adid: string;
   deviceId: string;
+  @Enumerable(false)
   proxyUrl: string;
+  @Enumerable(false)
   cookieStore = new MemoryCookieStore();
+  @Enumerable(false)
   cookieJar = jar(this.cookieStore);
+  @Enumerable(false)
   checkpoint: CheckpointResponse | null = null;
+  @Enumerable(false)
   challenge: ChallengeStateResponse | null = null;
   clientSessionIdLifetime: number = 1200000;
   pigeonSessionIdLifetime: number = 1200000;
@@ -82,11 +122,7 @@ export class State {
   }
 
   public get webUserAgent() {
-    return `Mozilla/5.0 (Linux; Android ${this.devicePayload.android_release}; ${this.devicePayload.model} Build/${
-      this.build
-    }; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/70.0.3538.110 Mobile Safari/537.36 ${
-      this.appUserAgent
-    }`;
+    return `Mozilla/5.0 (Linux; Android ${this.devicePayload.android_release}; ${this.devicePayload.model} Build/${this.build}; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/70.0.3538.110 Mobile Safari/537.36 ${this.appUserAgent}`;
   }
 
   public get devicePayload() {
@@ -124,6 +160,7 @@ export class State {
     try {
       return this.extractCookieValue('csrftoken');
     } catch {
+      State.stateDebug('csrftoken lookup failed, returning "missing".');
       return 'missing';
     }
   }
@@ -141,13 +178,14 @@ export class State {
   }
 
   public extractCookie(key: string): Cookie | null {
-    const cookies = this.cookieJar.getCookies(HOST);
+    const cookies = this.cookieJar.getCookies(this.constants.HOST);
     return _.find(cookies, { key }) || null;
   }
 
   public extractCookieValue(key: string): string {
     const cookie = this.extractCookie(key);
     if (cookie === null) {
+      State.stateDebug(`Could not find ${key}`);
       throw new IgCookieNotFoundError(key);
     }
     return cookie.value;
@@ -164,12 +202,44 @@ export class State {
     }
   }
 
-  public async deserializeCookieJar(cookies: string) {
+  public async deserializeCookieJar(cookies: string | CookieJar.Serialized) {
     this.cookieJar['_jar'] = await Bluebird.fromCallback(cb => CookieJar.deserialize(cookies, this.cookieStore, cb));
   }
 
   public async serializeCookieJar(): Promise<CookieJar.Serialized> {
     return Bluebird.fromCallback(cb => this.cookieJar['_jar'].serialize(cb));
+  }
+
+  public async serialize(): Promise<{ constants; cookies } & any> {
+    const obj = {
+      constants: this.constants,
+      cookies: JSON.stringify(await this.serializeCookieJar()),
+    };
+    for (const [key, value] of Object.entries(this)) {
+      obj[key] = value;
+    }
+    return obj;
+  }
+
+  public async deserialize(state: string | any): Promise<void> {
+    State.stateDebug(`Deserializing state of type ${typeof state}`);
+    const obj = typeof state === 'string' ? JSON.parse(state) : state;
+    if (typeof obj !== 'object') {
+      State.stateDebug(`State deserialization failed, obj is of type ${typeof obj} (object expected)`);
+      throw new TypeError('State isn\'t an object or serialized JSON');
+    }
+    State.stateDebug(`Deserializing ${Object.keys(obj).join(', ')}`);
+    if (obj.constants) {
+      this.constants = obj.constants;
+      delete obj.constants;
+    }
+    if (obj.cookies) {
+      await this.deserializeCookieJar(obj.cookies);
+      delete obj.cookies;
+    }
+    for (const [key, value] of Object.entries(obj)) {
+      this[key] = value;
+    }
   }
 
   public generateDevice(seed: string): void {

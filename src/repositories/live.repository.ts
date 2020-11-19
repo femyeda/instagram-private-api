@@ -4,6 +4,7 @@ import {
   LiveSwitchCommentsResponseRootObject,
   LiveCreateBroadcastResponseRootObject,
   LiveStartBroadcastResponseRootObject,
+  LiveAddPostLiveToIgtvResponseRootObject,
   LiveCommentsResponseRootObject,
   LiveHeartbeatViewerCountResponseRootObject,
   LiveInfoResponseRootObject,
@@ -12,7 +13,9 @@ import {
   LiveGetQuestionsResponseRootObject,
   LiveLikeResponseRootObject,
   LiveLikeCountResponseRootObject,
+  LivePostLiveThumbnailsResponseRootObject,
   LiveJoinRequestCountsResponseRootObject,
+  LiveAddToPostResponse,
 } from '../responses';
 
 export class LiveRepository extends Repository {
@@ -214,6 +217,17 @@ export class LiveRepository extends Repository {
     return body;
   }
 
+  public async getPostLiveThumbnails(broadcastId: string): Promise<LivePostLiveThumbnailsResponseRootObject> {
+    const { body } = await this.client.request.send<LivePostLiveThumbnailsResponseRootObject>({
+      url: `/api/v1/live/${broadcastId}/get_post_live_thumbnails/`,
+      method: 'GET',
+      qs: {
+        signed_body: this.client.request.sign({}),
+      },
+    });
+    return body;
+  }
+
   public async resumeBroadcastAfterContentMatch(broadcastId: string): Promise<any> {
     // TODO: test
     const { body } = await this.client.request.send({
@@ -262,6 +276,36 @@ export class LiveRepository extends Repository {
         _csrftoken: this.client.state.cookieCsrfToken,
         _uuid: this.client.state.uuid,
         should_send_notifications: sendNotifications,
+      }),
+    });
+    return body;
+  }
+
+  public async addPostLiveToIgtv({
+    broadcastId,
+    title,
+    description,
+    coverUploadId,
+    igtvSharePreviewToFeed = false,
+  }: {
+    broadcastId: string;
+    title: string;
+    description: string;
+    coverUploadId: string;
+    igtvSharePreviewToFeed?: boolean;
+  }): Promise<LiveAddPostLiveToIgtvResponseRootObject> {
+    const { body } = await this.client.request.send<LiveAddPostLiveToIgtvResponseRootObject>({
+      url: `/api/v1/live/add_post_live_to_igtv/`,
+      method: 'POST',
+      form: this.client.request.sign({
+        _csrftoken: this.client.state.cookieCsrfToken,
+        _uuid: this.client.state.uuid,
+        broadcast_id: broadcastId,
+        cover_upload_id: coverUploadId,
+        description: description,
+        title: title,
+        internal_only: false,
+        igtv_share_preview_to_feed: igtvSharePreviewToFeed,
       }),
     });
     return body;
@@ -335,6 +379,19 @@ export class LiveRepository extends Repository {
       method: 'POST',
       form: this.client.request.sign({
         sources: 'story_and_live',
+      }),
+    });
+    return body;
+  }
+
+  public async addToPostLive(broadcastId: string): Promise<LiveAddToPostResponse> {
+    const { body } = await this.client.request.send({
+      url: `/api/v1/live/${broadcastId}/add_to_post_live/`,
+      method: 'POST',
+      form: this.client.request.sign({
+        _csrftoken: this.client.state.cookieCsrfToken,
+        _uid: this.client.state.cookieUserId,
+        _uuid: this.client.state.uuid,
       }),
     });
     return body;

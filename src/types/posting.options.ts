@@ -10,6 +10,7 @@ import {
   StoryQuiz,
   StorySlider,
 } from './media.configure-story.options';
+import { StickerBuilder } from '../sticker-builder';
 
 export interface PostingUsertags {
   in: Array<{ user_id: number | string; position: [number, number] }>;
@@ -44,6 +45,8 @@ export interface PostingStoryOptions {
   chat?: StoryChat;
   quiz?: StoryQuiz;
   link?: string;
+
+  stickerConfig?: (any & { story_sticker_ids }) | StickerBuilder;
 }
 
 export interface PostingStoryLocationSticker {
